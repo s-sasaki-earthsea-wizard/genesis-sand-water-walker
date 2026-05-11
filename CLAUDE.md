@@ -24,6 +24,22 @@
 - Python/CUDA 依存はすべて Docker イメージ内に隔離 (ホスト側 Python セットアップ不要)
 - エントリポイントは `Makefile` に集約 (`make help` で一覧)
 
+### Phase 完了記録
+
+- **Phase 0 — Baseline scenes**: humanoid を砂、walker を水に落下させる
+  シーンと MPM ↔ 剛体カップリングを検証 (`scripts/humanoid_on_sand.py`、
+  `scripts/walker_on_water.py`)
+- **Phase 1 — Walker marching on rigid floor**: 平面 walker を剛体床上で
+  その場足踏みさせる adaptive PID コントローラを実装
+  (`scripts/walker_marching.py`)。役割分担:
+  - swing: hip 非対称、I 項 (歩境界で更新) で cadence 変化を自動適応
+  - pitch: hip 対称、P+D
+  - x: ankle 対称、P+D
+  ベースライン (1 Hz / KNEE_AMPLITUDE=0.6) で 2.4 秒後 `|x| ≤ 2 cm`、
+  `|pitch| ≤ 1°`。cadence 倍速は再チューニング不要。knee 振幅 0.8 rad 超は
+  前方ドリフトが残存 (Phase 1 の積み残し)。`GAIT_HZ` と `KNEE_AMPLITUDE` は
+  CLI/Makefile 変数として外出し済み。
+
 ## 言語設定
 
 このプロジェクトでは**日本語**での応答を行ってください。

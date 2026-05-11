@@ -3,22 +3,24 @@
 Soft-terrain locomotion experiments built on top of
 [Genesis](https://github.com/Genesis-Embodied-AI/Genesis): we drop a humanoid
 into a sand pool and a planar walker into a water pool, using Genesis's
-MPM ↔ rigid-body coupling.
+MPM ↔ rigid-body coupling. A first stepping controller for the planar walker
+on a rigid floor is also included as the precursor to walking on sand/water.
 
-The long-term goal is **stepping/walking on sand and water** — a learned policy
+The long-term goal is **stepping/walking on sand and water** — a controller
 that keeps a bipedal robot upright while interacting with a deformable medium.
-The dive scripts in this repository are the baseline scene/coupling setup that
-goal will build on; no controller is trained yet.
+
+日本語版は [readme/README.ja.md](readme/README.ja.md) を参照してください。
 
 ## Demos
 
-The two scripts below each produce an MP4 of the dive plus a per-step CSV of
-the torso trajectory. Output goes to `outputs/`.
+Each script produces an MP4 plus a per-step CSV of the torso trajectory. Output
+goes to `outputs/`.
 
 | Scenario | Script | Output |
 | --- | --- | --- |
 | Humanoid → 0.75 m deep sand, 3.6 m drop | `scripts/humanoid_on_sand.py` | `outputs/humanoid_on_sand.{mp4,csv}` |
 | Planar walker → 0.75 m deep water, 3.2 m drop | `scripts/walker_on_water.py` | `outputs/walker_on_water.{mp4,csv}` |
+| Planar walker marches in place on rigid floor | `scripts/walker_marching.py` | `outputs/walker_marching.{mp4,csv}` |
 
 ## Requirements
 
@@ -39,6 +41,15 @@ make check-gpu           # optional: confirm Docker can see the GPU
 make dive-humanoid       # humanoid dive into sand → outputs/humanoid_on_sand.mp4
 make dive-walker         # walker dive into water → outputs/walker_on_water.mp4
 make dive-all            # both, sequentially
+make march-walker        # walker marches in place on rigid floor (~1 min)
+```
+
+The marching cadence and lift height can be overridden on the command line:
+
+```bash
+make march-walker GAIT_HZ=2.0                      # 2 Hz cadence
+make march-walker KNEE_AMPLITUDE=0.9               # higher foot lift
+make march-walker GAIT_HZ=2.0 KNEE_AMPLITUDE=0.9   # both
 ```
 
 Each dive simulates 2.4 s of physics (600 steps, `dt = 4 ms`, 25 sub-steps for
@@ -59,12 +70,39 @@ genesis-sand-water-walker/
 │   └── *.json             # NVIDIA EGL/Vulkan ICD descriptors
 ├── scripts/
 │   ├── humanoid_on_sand.py
-│   └── walker_on_water.py
+│   ├── walker_on_water.py
+│   └── walker_marching.py # adaptive PID gait on rigid floor
 ├── assets/
 │   ├── humanoid_no_floor.xml   # MJCF copies of Genesis's bundled models
 │   └── walker_no_floor.xml     # with the worldbody floor plane removed
+├── readme/
+│   └── README.ja.md       # Japanese translation of this file
 └── outputs/               # generated videos + CSVs (gitignored)
 ```
+
+## Marching controller (walker_marching.py)
+
+The walker model is planar (3 unactuated root DoFs: `rootz` slide, `rootx`
+slide, `rooty` hinge) with 6 actuated joints — hip / knee / ankle on each leg.
+The controller is a small PID with a deliberate role split:
+
+| Channel | Actuator | Term(s) | Purpose |
+| --- | --- | --- | --- |
+| Swing | hip (asymmetric) | I, updated per step | Lift the swing leg forward; the integrator absorbs cadence changes |
+| Pitch balance | hip (symmetric) | P + D | Keep `rooty` near zero |
+| X balance | ankle (symmetric) | P + D | Hold `rootx` near zero via stance-foot horizontal force |
+
+Routing pitch through hip torque and x through ankle torque is what lets the
+controller hold both states simultaneously — the walker's foot attaches +0.06 m
+in front of the hip pivot, so hip-only control couples the two and ends up
+either drifting forward or tipping backward.
+
+At the baseline (`GAIT_HZ=1.0`, `KNEE_AMPLITUDE=0.6`), after a 0.3 s settle
+and 2.1 s of marching the walker holds `|x| ≤ 2 cm` and `|pitch| ≤ 1°`.
+Doubling the cadence is absorbed by the integrator without re-tuning. Raising
+the knee amplitude beyond ~0.8 rad introduces forward drift (the P/D gains on
+the ankle channel would need to be scaled with lift) — a documented limitation
+to address before moving to sand/water.
 
 ## Why the custom MJCFs
 
@@ -98,8 +136,10 @@ The interesting parameters live near the top of each script:
 
 - [x] Drop a humanoid into a deep sand pool (scene + coupling validated)
 - [x] Drop a planar walker into a deep water pool (scene + coupling validated)
-- [ ] Train a stepping/walking policy that stays upright on sand
-- [ ] Train a stepping/walking policy that stays upright on water (or surface-running gait)
+- [x] Walker marches in place on rigid floor (adaptive PID, `make march-walker`)
+- [ ] Walker marches in place on sand
+- [ ] Walker marches in place on water
+- [ ] Step forward / stepping policy on rigid, then transferred to sand/water
 - [ ] Domain randomization across pool depth, particle density, friction
 - [ ] Sim-to-real transfer notes
 
