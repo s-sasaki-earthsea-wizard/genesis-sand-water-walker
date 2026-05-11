@@ -4,11 +4,12 @@ First step toward stepping on sand/water: no MPM medium, no drop. The walker
 spawns just above a rigid plane, settles, then steps in place under an
 adaptive controller that updates the per-step hip amplitude from torso state
 so the gait shape does not need re-tuning when the user changes the cadence
-(``GAIT_HZ``) or lift height (``KNEE_AMPLITUDE``).
+(``--gait-hz``) or lift height (``--knee-amplitude``).
 
 Saves an MP4 and a per-step CSV of the torso trajectory and full qpos to
 ``outputs/``.
 """
+import argparse
 import os
 from dataclasses import dataclass
 
@@ -36,9 +37,13 @@ KP = np.array([200.0, 200.0, 80.0, 80.0, 40.0, 40.0])
 KV = np.array([10.0, 10.0, 6.0, 6.0, 3.0, 3.0])
 
 
-# ---------- User knobs (intended to remain stable across re-runs) -----------
-GAIT_HZ = 1.0            # marching cadence (one full left/right cycle per second)
-KNEE_AMPLITUDE = 0.6     # rad, swing-side knee bend — controls foot lift height
+# ---------- User knobs ------------------------------------------------------
+# GAIT_HZ (marching cadence) and KNEE_AMPLITUDE (foot lift height) are exposed
+# via argparse so they can be swept without editing the file. The defaults
+# below are the tuned baseline; the adaptive controller's integrator absorbs
+# changes to GAIT_HZ, and tolerates moderate changes to KNEE_AMPLITUDE.
+DEFAULT_GAIT_HZ = 1.0
+DEFAULT_KNEE_AMPLITUDE = 0.6
 SETTLE_TIME = 0.30       # s, hold the default pose before starting the gait
 
 
@@ -85,14 +90,16 @@ def _np(x):
     return x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else np.asarray(x)
 
 
-def update_step_adaptation(state: GaitState, t: float, pitch: float, x: float) -> bool:
+def update_step_adaptation(
+    state: GaitState, t: float, pitch: float, x: float, gait_hz: float
+) -> bool:
     """Advance the per-step integrator at half-cycle boundaries.
 
     Returns True iff this tick crossed a step boundary (useful for logging).
     """
     if t < SETTLE_TIME:
         return False
-    step_idx = int((t - SETTLE_TIME) * 2.0 * GAIT_HZ)
+    step_idx = int((t - SETTLE_TIME) * 2.0 * gait_hz)
     if step_idx == state.step_idx:
         return False
     state.step_idx = step_idx
@@ -102,7 +109,14 @@ def update_step_adaptation(state: GaitState, t: float, pitch: float, x: float) -
 
 
 def gait_targets(
-    state: GaitState, t: float, pitch: float, pitch_rate: float, x: float, x_rate: float
+    state: GaitState,
+    t: float,
+    pitch: float,
+    pitch_rate: float,
+    x: float,
+    x_rate: float,
+    gait_hz: float,
+    knee_amplitude: float,
 ) -> np.ndarray:
     """PD position targets for [r_hip, l_hip, r_knee, l_knee, r_ankle, l_ankle].
 
@@ -118,7 +132,7 @@ def gait_targets(
     """
     if t < SETTLE_TIME:
         return np.zeros(6)
-    phase = 2.0 * np.pi * GAIT_HZ * (t - SETTLE_TIME)
+    phase = 2.0 * np.pi * gait_hz * (t - SETTLE_TIME)
     s = np.sin(phase)
     r_lift = max(0.0, s)
     l_lift = max(0.0, -s)
@@ -134,14 +148,37 @@ def gait_targets(
 
     r_hip = swing_r + pitch_balance
     l_hip = swing_l + pitch_balance
-    r_knee = -KNEE_AMPLITUDE * r_lift
-    l_knee = -KNEE_AMPLITUDE * l_lift
+    r_knee = -knee_amplitude * r_lift
+    l_knee = -knee_amplitude * l_lift
     r_ankle = x_balance
     l_ankle = x_balance
     return np.array([r_hip, l_hip, r_knee, l_knee, r_ankle, l_ankle])
 
 
-def main():
+def parse_args(argv=None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument(
+        "--gait-hz",
+        type=float,
+        default=DEFAULT_GAIT_HZ,
+        help=f"Marching cadence in Hz (default: {DEFAULT_GAIT_HZ}).",
+    )
+    p.add_argument(
+        "--knee-amplitude",
+        type=float,
+        default=DEFAULT_KNEE_AMPLITUDE,
+        help=f"Swing-side knee bend in rad (default: {DEFAULT_KNEE_AMPLITUDE}).",
+    )
+    return p.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    print(
+        f"[walker_marching] gait_hz={args.gait_hz} knee_amplitude={args.knee_amplitude}",
+        flush=True,
+    )
+
     os.makedirs(OUT_DIR, exist_ok=True)
     gs.init(precision="32", logging_level="info")
 
@@ -199,8 +236,11 @@ def main():
         x_rate = float(qvel[1])
         pitch_rate = float(qvel[2])
 
-        stepped = update_step_adaptation(state, sim_t, pitch, x)
-        target = gait_targets(state, sim_t, pitch, pitch_rate, x, x_rate)
+        stepped = update_step_adaptation(state, sim_t, pitch, x, args.gait_hz)
+        target = gait_targets(
+            state, sim_t, pitch, pitch_rate, x, x_rate,
+            args.gait_hz, args.knee_amplitude,
+        )
 
         walker.control_dofs_position(target, dofs_idx_local=dof_idx)
         scene.step()
