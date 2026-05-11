@@ -18,7 +18,7 @@ DOCKER_RUN    ?= docker run --rm --gpus all \
 # ----- targets --------------------------------------------------------------
 .DEFAULT_GOAL := help
 
-.PHONY: help build dive-humanoid dive-walker dive-all shell \
+.PHONY: help build dive-humanoid dive-walker dive-all march-walker shell \
         clean clean-outputs clean-image check-gpu
 
 ## help: list available targets
@@ -52,6 +52,10 @@ dive-walker:
 
 ## dive-all: run both dive simulations sequentially
 dive-all: dive-humanoid dive-walker
+
+## march-walker: walker marches in place on a flat rigid floor (no sand/water)
+march-walker:
+	$(DOCKER_RUN) $(IMAGE) -c "python -u scripts/walker_marching.py"
 
 ## shell: open an interactive bash shell inside the Genesis container
 shell:
