@@ -1,0 +1,17 @@
+# simulation outputs
+outputs/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# docker
+.docker-build-cache/
