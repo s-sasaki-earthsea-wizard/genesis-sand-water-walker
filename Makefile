@@ -9,6 +9,8 @@ DOCKERFILE    ?= docker/Dockerfile
 CONTAINER     ?= gswwalker-run
 GAIT_HZ       ?= 1.0
 KNEE_AMPLITUDE?= 0.6
+WATER_LEVEL   ?= 0.5
+DURATION      ?= 2.4
 PROJECT_DIR   := $(shell pwd)
 WORKSPACE     ?= /workspace
 DOCKER_RUN    ?= docker run --rm --gpus all \
@@ -20,8 +22,8 @@ DOCKER_RUN    ?= docker run --rm --gpus all \
 # ----- targets --------------------------------------------------------------
 .DEFAULT_GOAL := help
 
-.PHONY: help build dive-humanoid dive-walker dive-all march-walker shell \
-        clean clean-outputs clean-image check-gpu
+.PHONY: help build dive-humanoid dive-walker dive-all march-walker \
+        march-walker-in-water shell clean clean-outputs clean-image check-gpu
 
 ## help: list available targets
 help:
@@ -60,6 +62,12 @@ dive-all: dive-humanoid dive-walker
 ##   `make march-walker GAIT_HZ=2.0 KNEE_AMPLITUDE=0.9`
 march-walker:
 	$(DOCKER_RUN) $(IMAGE) -c "python -u scripts/walker_marching.py --gait-hz $(GAIT_HZ) --knee-amplitude $(KNEE_AMPLITUDE)"
+
+## march-walker-in-water: walker marches in place with lower legs in a water pool
+##   override GAIT_HZ / KNEE_AMPLITUDE / WATER_LEVEL / DURATION on the command line, e.g.
+##   `make march-walker-in-water WATER_LEVEL=0.4 GAIT_HZ=1.5 DURATION=5.0`
+march-walker-in-water:
+	$(DOCKER_RUN) $(IMAGE) -c "python -u scripts/walker_marching_in_water.py --gait-hz $(GAIT_HZ) --knee-amplitude $(KNEE_AMPLITUDE) --water-level $(WATER_LEVEL) --duration $(DURATION)"
 
 ## shell: open an interactive bash shell inside the Genesis container
 shell:
