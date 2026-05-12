@@ -10,6 +10,11 @@
 - **humanoid** を深さ 0.75 m の砂プールへ約 3.6 m から落下 (`scripts/humanoid_on_sand.py`)
 - **planar walker** を深さ 0.75 m の水プールへ約 3.2 m から落下 (`scripts/walker_on_water.py`)
 
+さらに、コントローラ付きでその場足踏みさせるシーンを提供する:
+
+- 剛体床上の足踏み (`scripts/walker_marching.py`)
+- 膝丈の水プールに足を浸した状態での足踏み (`scripts/walker_marching_in_water.py`)
+
 各スクリプトは MP4 動画と胴体軌跡 CSV を `outputs/` に出力する。
 
 ### 長期目標
@@ -39,6 +44,28 @@
   `|pitch| ≤ 1°`。cadence 倍速は再チューニング不要。knee 振幅 0.8 rad 超は
   前方ドリフトが残存 (Phase 1 の積み残し)。`GAIT_HZ` と `KNEE_AMPLITUDE` は
   CLI/Makefile 変数として外出し済み。
+- **Phase 2 — Walker marching in shallow water**:
+  Phase 1 のコントローラを土台に、剛体床の上に深さ約 0.5 m (膝高さ) の MPM 水
+  プールを重ねた統合シーンを実装 (`scripts/walker_marching_in_water.py`)。
+  dry-floor の制御則を水中へ転用する過程で必要だった主要な改修:
+  - **Pre-settle phase**: walker を水面の +10 cm 上で spawn し、本ループ前に
+    `PRESETTLE_STEPS=250` (約 1.0 s) だけ scene を空回しして MPM の水柱を静水圧
+    平衡へ。水ボックス spawn 直後の "ブロック落下" 過渡が脚に衝撃を与える問題
+    を切り離す。
+  - **Balance during settle**: dry script は SETTLE 中に全関節 target=0 だが、
+    水中では浮力・抗力の慢性外乱でその間に walker が傾く。本スクリプトでは
+    `pitch_balance` / `x_balance` を `t=0` から常時適用し、swing/knee のみ
+    `SETTLE_TIME=1.0 s` までゲート。
+  - **強化された x 制御**: 各 swing で水抗力が walker を後方へ押す反作用を相殺
+    するため、ankle ゲインを `P_X_ANKLE 1.5→3.0`、`D_X_ANKLE 0.8→1.5`、
+    `ANKLE_LIMIT 0.6→0.785` (MJCF の上限) へ。
+  - **MPM 境界**: `lower_bound z=-0.10` に拡張 (`grid_density=40` の safety
+    padding 約 0.075 m を吸収して水ボックスを z=0 から張れるように)。
+
+  ベースライン (`GAIT_HZ=1.0` / `KNEE_AMPLITUDE=0.6` / `WATER_LEVEL=0.5`、
+  `DURATION=2.4 s`) で `|x| ≤ 2.2 cm`、`|pitch| ≤ 1.1°`、`hip_amp_i ≈ 0.16`
+  (saturation せず) と、Phase 1 dry-floor と同等の安定性に到達。CLI/Makefile
+  変数: `GAIT_HZ` / `KNEE_AMPLITUDE` / `WATER_LEVEL` / `DURATION`。
 
 ## 言語設定
 
