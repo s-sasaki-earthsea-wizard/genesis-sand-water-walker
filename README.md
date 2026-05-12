@@ -21,6 +21,7 @@ goes to `outputs/`.
 | Humanoid → 0.75 m deep sand, 3.6 m drop | `scripts/humanoid_on_sand.py` | `outputs/humanoid_on_sand.{mp4,csv}` |
 | Planar walker → 0.75 m deep water, 3.2 m drop | `scripts/walker_on_water.py` | `outputs/walker_on_water.{mp4,csv}` |
 | Planar walker marches in place on rigid floor | `scripts/walker_marching.py` | `outputs/walker_marching.{mp4,csv}` |
+| Planar walker marches in place in knee-deep water | `scripts/walker_marching_in_water.py` | `outputs/walker_marching_in_water.{mp4,csv}` |
 
 ## Requirements
 
@@ -42,6 +43,7 @@ make dive-humanoid       # humanoid dive into sand → outputs/humanoid_on_sand.
 make dive-walker         # walker dive into water → outputs/walker_on_water.mp4
 make dive-all            # both, sequentially
 make march-walker        # walker marches in place on rigid floor (~1 min)
+make march-walker-in-water  # walker marches with lower legs in a water pool
 ```
 
 The marching cadence and lift height can be overridden on the command line:
@@ -50,6 +52,15 @@ The marching cadence and lift height can be overridden on the command line:
 make march-walker GAIT_HZ=2.0                      # 2 Hz cadence
 make march-walker KNEE_AMPLITUDE=0.9               # higher foot lift
 make march-walker GAIT_HZ=2.0 KNEE_AMPLITUDE=0.9   # both
+```
+
+The in-water variant accepts the same knobs plus `WATER_LEVEL` (top of the
+pool, in metres above the rigid floor; default 0.5 m ≈ knee height):
+
+```bash
+make march-walker-in-water WATER_LEVEL=0.4         # shallower pool (mid-shin)
+make march-walker-in-water GAIT_HZ=1.5 WATER_LEVEL=0.5
+make march-walker-in-water DURATION=5.0            # longer recording (default 2.4 s)
 ```
 
 Each dive simulates 2.4 s of physics (600 steps, `dt = 4 ms`, 25 sub-steps for
@@ -71,7 +82,8 @@ genesis-sand-water-walker/
 ├── scripts/
 │   ├── humanoid_on_sand.py
 │   ├── walker_on_water.py
-│   └── walker_marching.py # adaptive PID gait on rigid floor
+│   ├── walker_marching.py          # adaptive PID gait on rigid floor
+│   └── walker_marching_in_water.py # same gait, lower legs submerged
 ├── assets/
 │   ├── humanoid_no_floor.xml   # MJCF copies of Genesis's bundled models
 │   └── walker_no_floor.xml     # with the worldbody floor plane removed
@@ -137,8 +149,8 @@ The interesting parameters live near the top of each script:
 - [x] Drop a humanoid into a deep sand pool (scene + coupling validated)
 - [x] Drop a planar walker into a deep water pool (scene + coupling validated)
 - [x] Walker marches in place on rigid floor (adaptive PID, `make march-walker`)
+- [x] Walker marches in place in knee-deep water (integrated scene, `make march-walker-in-water`) — `|x| ≤ 2.2 cm`, `|pitch| ≤ 1.1°` at baseline, on par with the dry-floor controller
 - [ ] Walker marches in place on sand
-- [ ] Walker marches in place on water
 - [ ] Step forward / stepping policy on rigid, then transferred to sand/water
 - [ ] Domain randomization across pool depth, particle density, friction
 - [ ] Sim-to-real transfer notes
